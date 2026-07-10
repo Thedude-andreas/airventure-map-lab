@@ -53,23 +53,31 @@ h1 { margin: 0; font-size: clamp(28px, 3vw, 46px); line-height: 1.05; letter-spa
 .touch-confirmation { background: #18795f; }
 .image-stage { display: grid; place-items: center; overflow: hidden; background-color: #e8eeeb; background-image: linear-gradient(45deg, rgba(30,60,55,.045) 25%, transparent 25%), linear-gradient(-45deg, rgba(30,60,55,.045) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(30,60,55,.045) 75%), linear-gradient(-45deg, transparent 75%, rgba(30,60,55,.045) 75%); background-size: 28px 28px; background-position: 0 0, 0 14px, 14px -14px, -14px 0; }
 .image-stage.has-image { cursor: crosshair; }
-.image-stage > img { width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.image-stage.has-image { touch-action: none; }
+.image-content { position: absolute; inset: 0; transform-origin: center; will-change: transform; }
+.image-content > img { width: 100%; height: 100%; object-fit: contain; user-select: none; pointer-events: none; }
 .drop-zone { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 58px; border: 2px dashed #9eadaa; border-radius: 14px; background: rgba(255,255,255,.62); cursor: pointer; }
 .drop-zone:hover { border-color: #b87519; background: rgba(255,255,255,.82); }
 .drop-zone small { color: var(--muted); }
 .upload-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #18343d; color: white; font-size: 25px; }
 .image-overlay { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; pointer-events: none; }
-.svg-control circle { fill: var(--amber); stroke: #071f2b; stroke-width: 5; vector-effect: non-scaling-stroke; }
-.svg-control text { fill: #071f2b; font-size: 18px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; }
+.svg-control circle { fill: var(--amber); stroke: #071f2b; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.svg-control text { fill: #071f2b; font-size: 10px; font-weight: 900; text-anchor: middle; dominant-baseline: middle; }
 .svg-pending circle { fill: white; stroke-dasharray: 5 4; }
 .svg-gps .gps-core { fill: var(--red); stroke: white; stroke-width: 5; vector-effect: non-scaling-stroke; }
 .svg-gps .gps-pulse { fill: none; stroke: rgba(228,71,46,.55); stroke-width: 4; vector-effect: non-scaling-stroke; animation: pulse 2s infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes pulse { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
-.map-label { border: 0 !important; background: transparent !important; box-shadow: none !important; color: #071f2b !important; font-size: 10px !important; font-weight: 900 !important; }
+.map-label { border: 0 !important; background: transparent !important; box-shadow: none !important; color: #071f2b !important; font-size: 8px !important; font-weight: 900 !important; }
 .map-label::before { display: none !important; }
 .pending-map-label { border: 0 !important; border-radius: 7px !important; background: #132b33 !important; color: white !important; box-shadow: 0 3px 12px rgba(0,0,0,.22) !important; font-size: 11px !important; font-weight: 800 !important; }
 .pending-map-label::before { border-top-color: #132b33 !important; }
-.leaflet-affine-overlay { position: absolute; inset: 0; pointer-events: none; transform-origin: top left; }
+.leaflet-affine-overlay { position: absolute; pointer-events: none; transform-origin: top left; }
+.image-zoom-controls { position: absolute; z-index: 5; right: 12px; top: 12px; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px; background: rgba(19,43,51,.92); color: white; box-shadow: 0 3px 15px rgba(0,0,0,.22); }
+.image-zoom-controls button { display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 9px; border: 0; border-radius: 7px; background: rgba(255,255,255,.13); color: white; cursor: pointer; font-weight: 900; }
+.image-zoom-controls button:hover:not(:disabled) { background: rgba(255,255,255,.24); }
+.image-zoom-controls button:disabled { opacity: .35; cursor: default; }
+.image-zoom-controls span { min-width: 48px; text-align: center; font-size: 11px; font-weight: 800; }
+.image-zoom-controls .reset-zoom { font-size: 11px; }
 
 .lower-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(290px, .7fr); gap: 16px; margin-top: 16px; }
 .control-panel, .quality-panel { padding: 18px; }
