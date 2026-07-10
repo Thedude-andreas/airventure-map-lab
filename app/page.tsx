@@ -88,6 +88,14 @@ export default function Home() {
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayImageRef = useRef<HTMLImageElement | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const imageGestureRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    moved: boolean;
+  } | null>(null);
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
@@ -97,6 +105,8 @@ export default function Home() {
   const [gps, setGps] = useState<GeoPoint | null>(null);
   const [tracking, setTracking] = useState(false);
   const [opacity, setOpacity] = useState(0.66);
+  const [imageZoom, setImageZoom] = useState(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const [notice, setNotice] = useState("Ladda upp AirVenture-kartan för att börja.");
 
   const affine = useMemo(() => fitAffine(points), [points]);
@@ -114,7 +124,9 @@ export default function Home() {
         addPoint(geo, current.image);
         return {};
       }
-      setNotice("Kartpunkten är vald. Klicka på samma plats i AirVenture-kartan.");
+      setNotice(current.geo
+        ? "Kartpunkten flyttades. Klicka på samma plats i AirVenture-kartan."
+        : "Kartpunkten är vald. Klicka på samma plats i AirVenture-kartan.");
       return { ...current, geo };
     });
   }, [addPoint, setPending, setNotice]);
@@ -149,9 +161,9 @@ export default function Home() {
     controlLayersRef.current.forEach((layer) => layer.remove());
     controlLayersRef.current = points.map((point, index) =>
       L.circleMarker([point.geo.lat, point.geo.lng], {
-        radius: 8,
+        radius: 5,
         color: "#071f2b",
-        weight: 3,
+        weight: 2,
         fillColor: "#ffbf47",
         fillOpacity: 1,
       }).bindTooltip(String(index + 1), { permanent: true, direction: "center", className: "map-label" }).addTo(map),
@@ -166,9 +178,9 @@ export default function Home() {
     pendingGeoLayerRef.current = null;
     if (pending.geo) {
       pendingGeoLayerRef.current = L.circleMarker([pending.geo.lat, pending.geo.lng], {
-        radius: 11,
+        radius: 7,
         color: "#071f2b",
-        weight: 3,
+        weight: 2,
         dashArray: "5 4",
         fillColor: "#ffffff",
         fillOpacity: 0.95,
@@ -210,18 +222,23 @@ export default function Home() {
     const redraw = () => {
       const size = map.getSize();
       const scale = window.devicePixelRatio || 1;
+      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      L.DomUtil.setPosition(canvas, topLeft);
       canvas.width = size.x * scale;
       canvas.height = size.y * scale;
       canvas.style.width = `${size.x}px`;
       canvas.style.height = `${size.y}px`;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.scale(scale, scale);
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, size.x, size.y);
       if (!affine || !imageSize || !overlayImageRef.current) return;
-      const origin = map.latLngToContainerPoint(imageToGeo({ x: 0, y: 0 }, affine));
-      const right = map.latLngToContainerPoint(imageToGeo({ x: imageSize.x, y: 0 }, affine));
-      const bottom = map.latLngToContainerPoint(imageToGeo({ x: 0, y: imageSize.y }, affine));
+      const originLayer = map.latLngToLayerPoint(imageToGeo({ x: 0, y: 0 }, affine));
+      const rightLayer = map.latLngToLayerPoint(imageToGeo({ x: imageSize.x, y: 0 }, affine));
+      const bottomLayer = map.latLngToLayerPoint(imageToGeo({ x: 0, y: imageSize.y }, affine));
+      const origin = { x: originLayer.x - topLeft.x, y: originLayer.y - topLeft.y };
+      const right = { x: rightLayer.x - topLeft.x, y: rightLayer.y - topLeft.y };
+      const bottom = { x: bottomLayer.x - topLeft.x, y: bottomLayer.y - topLeft.y };
       ctx.globalAlpha = opacity;
       ctx.setTransform(
         ((right.x - origin.x) / imageSize.x) * scale,
@@ -251,26 +268,84 @@ export default function Home() {
       setImageName(file.name);
       setPoints([]);
       setPending({});
+      setImageZoom(1);
+      setImagePan({ x: 0, y: 0 });
       setNotice("Kartan är laddad. Klicka på en tydlig plats i vardera panelen.");
     };
     image.src = url;
   }
 
-  function chooseImage(event: React.MouseEvent<HTMLDivElement>) {
+  function chooseImageAt(clientX: number, clientY: number) {
     if (!imageSize || !imageStageRef.current) return;
     const bounds = imageStageRef.current.getBoundingClientRect();
     const scale = Math.min(bounds.width / imageSize.x, bounds.height / imageSize.y);
     const renderedWidth = imageSize.x * scale;
     const renderedHeight = imageSize.y * scale;
-    const x = (event.clientX - bounds.left - (bounds.width - renderedWidth) / 2) / scale;
-    const y = (event.clientY - bounds.top - (bounds.height - renderedHeight) / 2) / scale;
+    const localX = (clientX - bounds.left - bounds.width / 2 - imagePan.x) / imageZoom + bounds.width / 2;
+    const localY = (clientY - bounds.top - bounds.height / 2 - imagePan.y) / imageZoom + bounds.height / 2;
+    const x = (localX - (bounds.width - renderedWidth) / 2) / scale;
+    const y = (localY - (bounds.height - renderedHeight) / 2) / scale;
     if (x < 0 || y < 0 || x > imageSize.x || y > imageSize.y) return;
     const image = { x, y };
     if (pending.geo) addPoint(pending.geo, image);
     else {
       setPending((current) => ({ ...current, image }));
-      setNotice("Bildpunkten är vald. Klicka på samma plats i OpenStreetMap.");
+      setNotice(pending.image
+        ? "Bildpunkten flyttades. Klicka på samma plats i OpenStreetMap."
+        : "Bildpunkten är vald. Klicka på samma plats i OpenStreetMap.");
     }
+  }
+
+  function startImageGesture(event: React.PointerEvent<HTMLDivElement>) {
+    if (!imageUrl || event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    imageGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      moved: false,
+    };
+  }
+
+  function moveImageGesture(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = imageGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const totalDistance = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY);
+    if (totalDistance > 5) gesture.moved = true;
+    if (gesture.moved && imageZoom > 1) {
+      const dx = event.clientX - gesture.lastX;
+      const dy = event.clientY - gesture.lastY;
+      setImagePan((current) => ({ x: current.x + dx, y: current.y + dy }));
+    }
+    gesture.lastX = event.clientX;
+    gesture.lastY = event.clientY;
+  }
+
+  function endImageGesture(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = imageGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture.moved) chooseImageAt(event.clientX, event.clientY);
+    imageGestureRef.current = null;
+  }
+
+  function changeImageZoom(delta: number) {
+    setImageZoom((current) => {
+      const next = Math.min(8, Math.max(1, current + delta));
+      if (next === 1) setImagePan({ x: 0, y: 0 });
+      return next;
+    });
+  }
+
+  function undoLast() {
+    if (pending.geo || pending.image) {
+      setPending({});
+      setNotice("Den väntande punkten togs bort.");
+      return;
+    }
+    setPoints((current) => current.slice(0, -1));
+    setNotice("Det senaste punktparet togs bort.");
   }
 
   function toggleTracking() {
@@ -348,6 +423,7 @@ export default function Home() {
             Importera
           </label>
           <button className="button" disabled={!affine} onClick={exportCalibration}>Exportera</button>
+          <button className="button" disabled={points.length === 0 && !pending.geo && !pending.image} onClick={undoLast}>Ångra</button>
           <button className={`button ${tracking ? "active" : ""}`} onClick={toggleTracking}>
             {tracking ? "Pausa GPS" : "Visa min GPS"}
           </button>
@@ -372,8 +448,44 @@ export default function Home() {
             <div><span className="step">2</span><div><h2>AirVenture-karta</h2><p>Klicka på exakt samma plats</p></div></div>
             <span className="source">{imageName || "Ingen bild laddad"}</span>
           </div>
-          <div className={`image-stage ${imageUrl ? "has-image" : ""}`} ref={imageStageRef} onClick={chooseImage}>
-            {imageUrl ? <img src={imageUrl} alt="Uppladdad AirVenture-karta" draggable={false} /> : (
+          <div
+            className={`image-stage ${imageUrl ? "has-image" : ""}`}
+            ref={imageStageRef}
+            onPointerDown={startImageGesture}
+            onPointerMove={moveImageGesture}
+            onPointerUp={endImageGesture}
+            onPointerCancel={() => { imageGestureRef.current = null; }}
+            onWheel={(event) => {
+              if (!imageUrl) return;
+              event.preventDefault();
+              changeImageZoom(event.deltaY < 0 ? 0.5 : -0.5);
+            }}
+          >
+            {imageUrl ? <div className="image-content" style={{ transform: `translate3d(${imagePan.x}px, ${imagePan.y}px, 0) scale(${imageZoom})` }}>
+              <img src={imageUrl} alt="Uppladdad AirVenture-karta" draggable={false} />
+              {imageSize && (
+                <svg className="image-overlay" viewBox={`0 0 ${imageSize.x} ${imageSize.y}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                  {points.map((point, index) => (
+                    <g className="svg-control" key={point.id} transform={`translate(${point.image.x} ${point.image.y})`}>
+                      <circle r="9" />
+                      <text y="1">{index + 1}</text>
+                    </g>
+                  ))}
+                  {pending.image && (
+                    <g className="svg-control svg-pending" transform={`translate(${pending.image.x} ${pending.image.y})`}>
+                      <circle r="9" />
+                      <text y="1">?</text>
+                    </g>
+                  )}
+                  {gpsImage && (
+                    <g className="svg-gps" transform={`translate(${gpsImage.x} ${gpsImage.y})`}>
+                      <circle className="gps-pulse" r="28" />
+                      <circle className="gps-core" r="14" />
+                    </g>
+                  )}
+                </svg>
+              )}
+            </div> : (
               <label className="drop-zone">
                 <input type="file" accept="image/*" onChange={loadImage} />
                 <span className="upload-icon">↥</span>
@@ -381,28 +493,12 @@ export default function Home() {
                 <small>PNG, JPG eller WEBP</small>
               </label>
             )}
-            {imageSize && imageUrl && (
-              <svg className="image-overlay" viewBox={`0 0 ${imageSize.x} ${imageSize.y}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-                {points.map((point, index) => (
-                  <g className="svg-control" key={point.id} transform={`translate(${point.image.x} ${point.image.y})`}>
-                    <circle r="18" />
-                    <text y="1">{index + 1}</text>
-                  </g>
-                ))}
-                {pending.image && (
-                  <g className="svg-control svg-pending" transform={`translate(${pending.image.x} ${pending.image.y})`}>
-                    <circle r="18" />
-                    <text y="1">?</text>
-                  </g>
-                )}
-                {gpsImage && (
-                  <g className="svg-gps" transform={`translate(${gpsImage.x} ${gpsImage.y})`}>
-                    <circle className="gps-pulse" r="28" />
-                    <circle className="gps-core" r="14" />
-                  </g>
-                )}
-              </svg>
-            )}
+            {imageUrl && <div className="image-zoom-controls" onPointerDown={(event) => event.stopPropagation()}>
+              <button type="button" aria-label="Zooma ut kartbilden" disabled={imageZoom <= 1} onClick={() => changeImageZoom(-0.5)}>−</button>
+              <span>{Math.round(imageZoom * 100)}%</span>
+              <button type="button" aria-label="Zooma in kartbilden" disabled={imageZoom >= 8} onClick={() => changeImageZoom(0.5)}>+</button>
+              <button type="button" className="reset-zoom" onClick={() => { setImageZoom(1); setImagePan({ x: 0, y: 0 }); }}>Återställ</button>
+            </div>}
           </div>
         </article>
       </section>
