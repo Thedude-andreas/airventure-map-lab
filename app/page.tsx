@@ -83,6 +83,7 @@ export default function Home() {
   const mapRef = useRef<LeafletMap | null>(null);
   const leafletRef = useRef<typeof import("leaflet") | null>(null);
   const controlLayersRef = useRef<CircleMarker[]>([]);
+  const pendingGeoLayerRef = useRef<CircleMarker | null>(null);
   const gpsLayerRef = useRef<CircleMarker | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayImageRef = useRef<HTMLImageElement | null>(null);
@@ -156,6 +157,28 @@ export default function Home() {
       }).bindTooltip(String(index + 1), { permanent: true, direction: "center", className: "map-label" }).addTo(map),
     );
   }, [points]);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+    const map = mapRef.current;
+    if (!L || !map) return;
+    pendingGeoLayerRef.current?.remove();
+    pendingGeoLayerRef.current = null;
+    if (pending.geo) {
+      pendingGeoLayerRef.current = L.circleMarker([pending.geo.lat, pending.geo.lng], {
+        radius: 11,
+        color: "#071f2b",
+        weight: 3,
+        dashArray: "5 4",
+        fillColor: "#ffffff",
+        fillOpacity: 0.95,
+      }).bindTooltip("Vald – fortsätt till steg 2", {
+        permanent: true,
+        direction: "top",
+        className: "pending-map-label",
+      }).addTo(map);
+    }
+  }, [pending.geo]);
 
   useEffect(() => {
     const L = leafletRef.current;
@@ -332,15 +355,19 @@ export default function Home() {
       </section>
 
       <section className="workspace">
-        <article className="map-card">
+        <article className={`map-card ${pending.geo ? "step-complete" : ""}`}>
           <div className="card-heading">
             <div><span className="step">1</span><div><h2>Verklig karta</h2><p>Klicka på en tydlig referenspunkt</p></div></div>
             <span className="source">OpenStreetMap</span>
           </div>
-          <div className="map-frame" ref={mapElementRef} />
+          <div className="map-wrap">
+            <div className="map-frame" ref={mapElementRef} />
+            {!pending.geo && <div className="tap-hint">Tryck snabbt för att välja · dra för att flytta kartan</div>}
+            {pending.geo && <div className="touch-confirmation">✓ Kartpunkt vald · fortsätt till steg 2 ↓</div>}
+          </div>
         </article>
 
-        <article className="map-card">
+        <article className={`map-card ${pending.geo ? "step-active" : ""}`}>
           <div className="card-heading">
             <div><span className="step">2</span><div><h2>AirVenture-karta</h2><p>Klicka på exakt samma plats</p></div></div>
             <span className="source">{imageName || "Ingen bild laddad"}</span>
